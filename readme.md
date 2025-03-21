@@ -13,7 +13,11 @@ crate
     ├── base.html                       
     ├── form.html
     └── home.html
-``` 
+```
+
+If you didnot install starberry,  install it by 
+
+`cargo install starberry` 
 
 ## 1. Main Application 
 
@@ -345,7 +349,7 @@ Contains two form examples:
 
 1. **Start the server**
    ```bash
-   cargo run
+   starberry run
    ```
    The server will listen on http://127.0.0.1:1111
 
