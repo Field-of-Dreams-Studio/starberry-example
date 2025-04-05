@@ -29,6 +29,9 @@ pub static APP: SApp = Lazy::new(|| {
         .workers(4) 
         .max_body_size(1024 * 1024 * 10) 
         .max_header_size(1024 * 10) 
+        .append_middleware::<MyMiddleWare1>() // Appending the middleware to the last in the middleware chain 
+        .append_middleware::<MyMiddleWare2>() 
+        .append_middleware::<MyMiddleWare3>() 
         .build() 
 }); 
 ```
@@ -39,6 +42,7 @@ The application is configured to:
 - Use 4 worker threads
 - Accept request bodies up to 10MB
 - Accept headers up to 10KB
+- Configure a middleware chain with `MyMiddleWare1`, `MyMiddleWare2`, and `MyMiddleWare3` that process requests in sequence 
 
 ### Routes and Handlers
 
@@ -46,7 +50,7 @@ The application is configured to:
 
 ```rust:19:21:src/main.rs
 #[lit_url(APP, "/")] 
-async fn home_route(_: HttpRequest) -> HttpResponse { 
+async fn home_route(_: Rc) -> HttpResponse { 
     html_response("<h1>Home</h1>") 
 } 
 ```
@@ -57,12 +61,12 @@ A simple home page route that returns an HTML response.
 
 ```rust:23:31:src/main.rs
 #[lit_url(APP, "/random/split/something")]
-async fn random_route(_: HttpRequest) -> HttpResponse {
+async fn random_route(_: Rc) -> HttpResponse {
     text_response("A random page") 
 }  
 
 #[lit_url(APP, "random")]
-async fn anything_random(_: HttpRequest) -> HttpResponse {
+async fn anything_random(_: Rc) -> HttpResponse {
     text_response("A random page") 
 }  
 ```
@@ -83,14 +87,14 @@ Creates a URL group for organizing related routes under `/test`.
 
 ```rust:42:55:src/main.rs
 #[url(TEST_URL.clone(), LitUrl("json_old"))]
-async fn json_test(_: HttpRequest) -> HttpResponse { 
+async fn json_test(_: Rc) -> HttpResponse { 
     let a = 2; 
     let body = object!({number: a, string: "Hello", array: [1, 2, 3]}); 
     json_response(body)
 }
 
 #[url(TEST_URL.clone(), LitUrl("json"))]
-async fn json_new_test(_: HttpRequest) -> HttpResponse { 
+async fn json_new_test(_: Rc) -> HttpResponse { 
     akari_json!({
         number: 3, 
         string: "Hello", 
@@ -112,7 +116,7 @@ Two ways to generate JSON responses:
 
 ```rust:57:72:src/main.rs
 #[url(TEST_URL.clone(), LitUrl("async_test"))] 
-async fn async_test(_: HttpRequest) -> HttpResponse {
+async fn async_test(_: Rc) -> HttpResponse {
     sleep(Duration::from_secs(1));
     println!("1");
     sleep(Duration::from_secs(1)); 
@@ -123,7 +127,7 @@ async fn async_test(_: HttpRequest) -> HttpResponse {
 } 
 
 #[url(TEST_URL.clone(), RegUrl("async_test2"))]  
-async fn async_test2(_: HttpRequest) -> HttpResponse {
+async fn async_test2(_: Rc) -> HttpResponse {
     // Similar to async_test
     // ...
 }
@@ -135,7 +139,7 @@ Demonstration of async processing with sleep operations.
 
 ```rust:83:95:src/main.rs
 #[url(TEST_URL.clone(), LitUrl("form_url_coded"))]  
-async fn test_form(request: HttpRequest) -> HttpResponse { 
+async fn test_form(request: Rc) -> HttpResponse { 
     println!("Request to this dir"); 
     if *request.method() == POST { 
         match request.form() { 
@@ -160,7 +164,7 @@ Handles form submissions:
 
 ```rust:97:110:src/main.rs
 #[url(TEST_URL.clone(), LitUrl("form"))]  
-async fn test_file(request: HttpRequest) -> HttpResponse { 
+async fn test_file(request: Rc) -> HttpResponse { 
     println!("Request to this dir"); 
     if *request.method() == POST { 
         match request.files() { 
@@ -184,7 +188,7 @@ Handles file uploads:
 
 ```rust:112:122:src/main.rs
 #[url(TEST_URL.clone(), LitUrl("temp"))]  
-async fn test_template(_: HttpRequest) -> HttpResponse { 
+async fn test_template(_: Rc) -> HttpResponse { 
     let items = object!([1, 2, 3, 4, 5]); 
     akari_render!(
         "home.html", 
@@ -210,7 +214,76 @@ furl.set_method(Arc::new(flexible_access));
 APP.clone().run().await; 
 ```
 
-Shows how to programmatically register a route at runtime.
+Shows how to programmatically register a route at runtime. 
+
+#### Middleware Defination 
+
+# Middleware Functions
+
+This module contains custom middleware functions for request processing in the web application framework.
+
+## Available Middleware
+
+### MyMiddleWare1 
+
+```rust
+#[middleware]
+pub async fn MyMiddleWare1(){ 
+    println!("Middleware: Received request for {}, start processing", req.path()); 
+    next(req)  
+}  
+```
+
+A simple logging middleware that prints when a request is received and begins processing. 
+
+This middleware logs the path of the incoming request before passing it to the next handler.
+
+### MyMiddleWare2 
+
+```rust
+#[middleware]
+pub async fn MyMiddleWare2(){ 
+    let path = req.path().to_owned(); 
+    let a = next(req).await; 
+    println!("Middleware: Received request for {}, end processing", path); // You cannot access to req here 
+    a.boxed_future() 
+}  
+```
+
+An "around" middleware that executes code both before and after the request is processed. 
+
+It captures the path early because the request object cannot be accessed after passing control 
+
+to the next middleware in the chain. After the next middleware completes, it logs the completion 
+
+of request processing.
+
+### MyMiddleWare3
+
+```rust
+#[middleware]
+pub async fn MyMiddleWare3(){ 
+    if req.path() == "/directly_return" { 
+        text_response("Directly return").boxed_future()
+    } else {
+        next(req) 
+    }
+} 
+```  
+
+A conditional middleware that demonstrates path-based routing control. 
+
+- If the request path equals "/directly_return", it immediately returns a text response without
+    passing the request to subsequent middleware
+- For all other paths, it forwards the request to the next middleware in the chain
+
+## Usage Notes
+
+- Middleware executes in the order they are applied to the application. Refer to the top to see how the middleware chain is built 
+
+- Request objects cannot be accessed after being passed to `next(req)` as demonstrated in MyMiddleWare2
+
+- Middleware can short-circuit the request processing by returning a response instead of calling `next(req)` 
 
 ## 2. Templates
 

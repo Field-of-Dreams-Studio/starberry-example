@@ -1,4 +1,4 @@
-use starberry::preload::*; 
+use starberry::prelude::*; 
 use example_documentation::*; 
 
 #[tokio::main]  
