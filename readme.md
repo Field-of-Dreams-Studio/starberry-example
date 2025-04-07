@@ -53,24 +53,33 @@ The application is configured to:
 #### Root Route
 
 ```rust:19:21:src/main.rs
-#[lit_url(APP, "/")] 
-async fn home_route(_: Rc) -> HttpResponse { 
+#[url(APP.lit_url("/"))] 
+async fn home_route(mut req: Rc) -> HttpResponse { 
     html_response("<h1>Home</h1>") 
-} 
+}  
 ```
 
-A simple home page route that returns an HTML response.
+A simple home page route that returns an HTML response. 
+
+Note: The function registered into a Url will automatically get the input of `&mut req: Rc`, you do not need to explicitly write in the arguments. 
+
+You can give a name of request variable by changing the function like this: 
+
+`async fn home_route(my_custom_req_name: Rc) -> HttpResponse ` 
+
+You must explicitly say your return type as HttpResponse or Rc 
 
 #### Random Routes
 
 ```rust:23:31:src/main.rs
-#[lit_url(APP, "/random/split/something")]
-async fn random_route(_: Rc) -> HttpResponse {
-    text_response("A random page") 
+#[url(APP.lit_url("/random/split/something"))]
+async fn random_route(mut req: Rc) -> Rc {
+    req.response = text_response("A random page"); 
+    req 
 }  
 
-#[lit_url(APP, "random")]
-async fn anything_random(_: Rc) -> HttpResponse {
+#[url(APP.lit_url("/directly_return"))]
+async fn directly_return() -> HttpResponse {
     text_response("A random page") 
 }  
 ```
@@ -80,9 +89,7 @@ Two different routes showing how URLs can be registered.
 #### Test URL Group
 
 ```rust:33:35:src/main.rs
-static TEST_URL: SUrl = Lazy::new(|| {
-    APP.reg_from(&[LitUrl("test")]) 
-}); 
+static TEST_URL: SPattern = Lazy::new(|| {LitUrl("test")}); 
 ```
 
 Creates a URL group for organizing related routes under `/test`.
@@ -90,15 +97,15 @@ Creates a URL group for organizing related routes under `/test`.
 #### JSON Response Examples
 
 ```rust:42:55:src/main.rs
-#[url(TEST_URL.clone(), LitUrl("json_old"))]
-async fn json_test(_: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("json_old")]))]
+async fn json_test() -> HttpResponse { 
     let a = 2; 
     let body = object!({number: a, string: "Hello", array: [1, 2, 3]}); 
     json_response(body)
-}
+} 
 
-#[url(TEST_URL.clone(), LitUrl("json"))]
-async fn json_new_test(_: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("json")]))]
+async fn json_new_test() -> HttpResponse { 
     akari_json!({
         number: 3, 
         string: "Hello", 
@@ -109,7 +116,7 @@ async fn json_new_test(_: Rc) -> HttpResponse {
             c: 3 
         } 
     }) 
-} 
+}  
 ```
 
 Two ways to generate JSON responses:
@@ -119,8 +126,8 @@ Two ways to generate JSON responses:
 #### Async Function Examples
 
 ```rust:57:72:src/main.rs
-#[url(TEST_URL.clone(), LitUrl("async_test"))] 
-async fn async_test(_: Rc) -> HttpResponse {
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("async_test")]))] 
+async fn async_test() -> HttpResponse {
     sleep(Duration::from_secs(1));
     println!("1");
     sleep(Duration::from_secs(1)); 
@@ -128,10 +135,10 @@ async fn async_test(_: Rc) -> HttpResponse {
     sleep(Duration::from_secs(1));
     println!("3");
     text_response("Async Test Page") 
-} 
+}  
 
 #[url(TEST_URL.clone(), RegUrl("async_test2"))]  
-async fn async_test2(_: Rc) -> HttpResponse {
+async fn async_test2() -> HttpResponse {
     // Similar to async_test
     // ...
 }
@@ -142,11 +149,11 @@ Demonstration of async processing with sleep operations.
 #### Form Handling
 
 ```rust:83:95:src/main.rs
-#[url(TEST_URL.clone(), LitUrl("form_url_coded"))]  
-async fn test_form(request: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("form_url_coded")]))]  
+async fn test_form() -> HttpResponse { 
     println!("Request to this dir"); 
-    if *request.method() == POST { 
-        match request.form() { 
+    if req.method() == POST { 
+        match req.form() { 
             Some(form) => { 
                 return text_response(format!("Form data: {:?}", form)); 
             } 
@@ -170,7 +177,7 @@ Handles form submissions:
 #[url(TEST_URL.clone(), LitUrl("form"))]  
 async fn test_file(request: Rc) -> HttpResponse { 
     println!("Request to this dir"); 
-    if *request.method() == POST { 
+    if request.method() == POST { 
         match request.files() { 
             Some(form) => { 
                 return text_response(format!("{:#?}", form.get("file").unwrap().get_files().unwrap())); 
@@ -192,7 +199,7 @@ Handles file uploads:
 
 ```rust:112:122:src/main.rs
 #[url(TEST_URL.clone(), LitUrl("temp"))]  
-async fn test_template(_: Rc) -> HttpResponse { 
+async fn test_template() -> HttpResponse { 
     let items = object!([1, 2, 3, 4, 5]); 
     akari_render!(
         "home.html", 
@@ -214,11 +221,15 @@ Demonstrates template rendering with the Akari template engine:
 ```rust:4:7:src/main.rs
 let furl = APP.clone().reg_from(&[LitUrl("flexible"), LitUrl("url"), LitUrl("may_be_changed")]); 
 furl.set_method(Arc::new(flexible_access)); 
-
-APP.clone().run().await; 
 ```
 
 Shows how to programmatically register a route at runtime. 
+
+### Running the application 
+
+```rust 
+APP.clone().run().await;  
+``` 
 
 #### Middleware Defination 
 
@@ -251,7 +262,7 @@ pub async fn MyMiddleWare2(){
     let a = next(req).await; 
     println!("Middleware: Received request for {}, end processing", path); // You cannot access to req here 
     a.boxed_future() 
-}  
+}   
 ```
 
 An "around" middleware that executes code both before and after the request is processed. 
@@ -268,11 +279,12 @@ of request processing.
 #[middleware]
 pub async fn MyMiddleWare3(){ 
     if req.path() == "/directly_return" { 
-        text_response("Directly return").boxed_future()
+        req.response = text_response("Directly return"); 
+        req.boxed_future() 
     } else {
         next(req) 
-    }
-} 
+    } 
+}  
 ```  
 
 A conditional middleware that demonstrates path-based routing control. 

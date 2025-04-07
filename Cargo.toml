@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-starberry = "0.4.1" 
+starberry = { path = "../Starberry/starberry"}  
 ctor = "0.4.0"  

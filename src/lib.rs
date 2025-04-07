@@ -1,17 +1,19 @@
 use starberry::prelude::*;  
 
 pub static APP: SApp = Lazy::new(|| { 
-    App::new() 
+    App::new()
         .binding(String::from("127.0.0.1:1111"))
         .mode(RunMode::Development)
         .workers(4) 
         .max_body_size(1024 * 1024 * 10) 
         .max_header_size(1024 * 10) 
+        .append_middleware::<MyMiddleWare2>() // Appending the middleware to the last in the middleware chain 
         .append_middleware::<MyMiddleWare1>() 
-        .append_middleware::<MyMiddleWare2>() 
         .append_middleware::<MyMiddleWare3>() 
+        .append_middleware::<MyMiddleWare4>() 
+        .append_middleware::<MyMiddleWare5>() 
         .build() 
-}); 
+});  
 
 #[middleware]
 pub async fn MyMiddleWare1(){ 
@@ -30,56 +32,73 @@ pub async fn MyMiddleWare2(){
 #[middleware]
 pub async fn MyMiddleWare3(){ 
     if req.path() == "/directly_return" { 
-        text_response("Directly return").boxed_future()
+        req.response = text_response("Directly return"); 
+        req.boxed_future() 
     } else {
         next(req) 
-    }
+    } 
 } 
 
-#[lit_url(APP, "/")] 
-async fn home_route(_: Rc) -> HttpResponse { 
+#[middleware] 
+pub async fn MyMiddleWare4(){ 
+    println!("Middleware: Received request for {}, start processing", req.path()); 
+    req.set_local("some_value", 5); 
+    req.set_param(true); 
+    next(req) 
+} 
+
+#[middleware] 
+pub async fn MyMiddleWare5(){ 
+    req = next(req).await; 
+    let value = req.take_local::<i32>("some_value").unwrap_or(0); 
+    let param = req.take_param::<bool>().unwrap_or(false); 
+    println!("Local: {}, Params: {}", value, param); 
+    req.boxed_future() 
+}
+
+#[url(APP.lit_url("/"))] 
+async fn home_route(mut req: Rc) -> HttpResponse { 
     html_response("<h1>Home</h1>") 
 } 
 
-#[lit_url(APP, "/random/split/something")]
-async fn random_route(_: Rc) -> HttpResponse {
+#[url(APP.lit_url("/random/split/something"))]
+async fn random_route(mut req: Rc) -> Rc {
+    req.response = text_response("A random page"); 
+    req 
+}  
+
+#[url(APP.lit_url("/directly_return"))]
+async fn directly_return() -> HttpResponse {
     text_response("A random page") 
 }  
 
-#[lit_url(APP, "/directly_return")]
-async fn directly_return(_: Rc) -> HttpResponse {
-    text_response("A random page") 
-}  
-
-#[lit_url(APP, "/print_sequence")]
-async fn print_sequence(_: Rc) -> HttpResponse {
+#[url(APP.lit_url("/print_sequence"))]
+async fn print_sequence() -> HttpResponse {
     println!("Processing request"); 
     text_response("See console") 
 }  
 
-#[lit_url(APP, "random")]
-async fn anything_random(_: Rc) -> HttpResponse {
+#[url(APP.lit_url("random"))]
+async fn anything_random() -> HttpResponse {
     text_response("A random page") 
 }  
 
-static TEST_URL: SUrl = Lazy::new(|| {
-    APP.reg_from(&[LitUrl("test")]) 
-}); 
+static TEST_URL: SPattern = Lazy::new(|| {LitUrl("test")});
 
-#[url(TEST_URL.clone(), LitUrl("hello"))]
-async fn hello(_: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("hello")]))]
+async fn hello() -> HttpResponse { 
     text_response("Hello")  
 } 
 
-#[url(TEST_URL.clone(), LitUrl("json_old"))]
-async fn json_test(_: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("json_old")]))]
+async fn json_test() -> HttpResponse { 
     let a = 2; 
     let body = object!({number: a, string: "Hello", array: [1, 2, 3]}); 
     json_response(body)
 } 
 
-#[url(TEST_URL.clone(), LitUrl("json"))]
-async fn json_new_test(_: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("json")]))]
+async fn json_new_test() -> HttpResponse { 
     akari_json!({
         number: 3, 
         string: "Hello", 
@@ -92,8 +111,8 @@ async fn json_new_test(_: Rc) -> HttpResponse {
     }) 
 } 
 
-#[url(TEST_URL.clone(), LitUrl("async_test"))] 
-async fn async_test(_: Rc) -> HttpResponse {
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("async_test")]))] 
+async fn async_test() -> HttpResponse {
     sleep(Duration::from_secs(1));
     println!("1");
     sleep(Duration::from_secs(1)); 
@@ -103,8 +122,8 @@ async fn async_test(_: Rc) -> HttpResponse {
     text_response("Async Test Page") 
 } 
 
-#[url(TEST_URL.clone(), RegUrl("async_test2"))]  
-async fn async_test2(_: Rc) -> HttpResponse {
+#[url(APP.reg_from(&[TEST_URL.clone(), RegUrl("async_test2")]))]  
+async fn async_test2() -> HttpResponse {
     sleep(Duration::from_secs(1));
     println!("1");
     sleep(Duration::from_secs(1));
@@ -114,17 +133,17 @@ async fn async_test2(_: Rc) -> HttpResponse {
     text_response("Async Test Page") 
 } 
 
-#[url(TEST_URL.clone(), RegUrl("[0-9]+"))]  
+#[url(APP.reg_from(&[TEST_URL.clone(), RegUrl("[0-9]+")]))]  
 // #[set_header_size(max_size: 2048, max_line_size: 1024, max_lines: 200)] 
-async fn testa(_: Rc) -> HttpResponse { 
+async fn testa() -> HttpResponse { 
     text_response("Number page") 
 } 
 
-#[url(TEST_URL.clone(), LitUrl("form_url_coded"))]  
-async fn test_form(context: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("form_url_coded")]))]  
+async fn test_form() -> HttpResponse { 
     println!("Request to this dir"); 
-    if context.method() == POST { 
-        match context.form() { 
+    if req.method() == POST { 
+        match req.form() { 
             Some(form) => { 
                 return text_response(format!("Form data: {:?}", form)); 
             } 
@@ -136,7 +155,7 @@ async fn test_form(context: Rc) -> HttpResponse {
     plain_template_response("form.html") 
 } 
 
-#[url(TEST_URL.clone(), LitUrl("form"))]  
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("form")]))]  
 async fn test_file(context: Rc) -> HttpResponse { 
     println!("Request to this dir"); 
     if context.method() == POST { 
@@ -145,8 +164,8 @@ async fn test_file(context: Rc) -> HttpResponse {
     plain_template_response("form.html") 
 } 
 
-#[url(TEST_URL.clone(), LitUrl("cookie"))]  
-async fn test_cookie(mut context: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("cookie")]))]  
+async fn test_cookie(context: Rc) -> HttpResponse { 
     if context.method() == POST { 
         match context.form() { 
             Some(form) => { 
@@ -174,8 +193,8 @@ async fn test_cookie(mut context: Rc) -> HttpResponse {
     ) 
 } 
 
-#[url(TEST_URL.clone(), LitUrl("temp"))]  
-async fn test_template(_: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("temp")]))]  
+async fn test_template() -> HttpResponse { 
     akari_render!(
         "home.html", 
         title="My Website - Home", 
@@ -186,13 +205,14 @@ async fn test_template(_: Rc) -> HttpResponse {
     ) 
 } 
 
-#[url(TEST_URL.clone(), AnyUrl())]  
-async fn any(mut context: Rc) -> HttpResponse { 
+#[url(APP.reg_from(&[TEST_URL.clone(), AnyUrl()]))]  
+async fn any(context: Rc) -> HttpResponse { 
     text_response(context.get_path(1)) 
 } 
 
-pub async fn flexible_access(_: Rc) -> HttpResponse { 
-    text_response("Flexible") 
+pub async fn flexible_access(mut rc: Rc) -> Rc { 
+    rc.response = text_response("Flexible"); 
+    rc 
 } 
  
 
