@@ -1,10 +1,11 @@
+use std::{fs::File, io::Read}; 
+
 use starberry::prelude::*;  
 
-pub static APP: SApp = Lazy::new(|| { 
+pub static APP: SApp = Lazy::new( || { 
     App::new()
         .binding(String::from("127.0.0.1:1111"))
-        .mode(RunMode::Development)
-        .workers(4) 
+        .mode(RunMode::Build)
         .max_body_size(1024 * 1024 * 10) 
         .max_header_size(1024 * 10) 
         .append_middleware::<MyMiddleWare2>() // Appending the middleware to the last in the middleware chain 
@@ -85,12 +86,12 @@ async fn anything_random() -> HttpResponse {
 
 static TEST_URL: SPattern = Lazy::new(|| {LitUrl("test")});
 
-#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("hello")]))]
+#[url(reg![&APP, TEST_URL.clone(), LitUrl("hello")])]
 async fn hello() -> HttpResponse { 
     text_response("Hello")  
 } 
 
-#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("json_old")]))]
+#[url(reg![&APP, TEST_URL, LitUrl("json_old")])]
 async fn json_test() -> HttpResponse { 
     let a = 2; 
     let body = object!({number: a, string: "Hello", array: [1, 2, 3]}); 
@@ -133,17 +134,16 @@ async fn async_test2() -> HttpResponse {
     text_response("Async Test Page") 
 } 
 
-#[url(APP.reg_from(&[TEST_URL.clone(), RegUrl("[0-9]+")]))]  
-// #[set_header_size(max_size: 2048, max_line_size: 1024, max_lines: 200)] 
+#[url(reg![&APP, TEST_URL, RegUrl("[0-9]+")])]  
 async fn testa() -> HttpResponse { 
     text_response("Number page") 
 } 
 
-#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("form_url_coded")]))]  
+#[url(reg![&APP, TEST_URL, LitUrl("form_url_coded")])]  
 async fn test_form() -> HttpResponse { 
     println!("Request to this dir"); 
     if req.method() == POST { 
-        match req.form() { 
+        match req.form().await { 
             Some(form) => { 
                 return text_response(format!("Form data: {:?}", form)); 
             } 
@@ -159,7 +159,7 @@ async fn test_form() -> HttpResponse {
 async fn test_file(context: Rc) -> HttpResponse { 
     println!("Request to this dir"); 
     if context.method() == POST { 
-        return text_response(format!("{:?}", context.files_or_default())); 
+        return text_response(format!("{:?}", context.files_or_default().await)); 
     } 
     plain_template_response("form.html") 
 } 
@@ -167,7 +167,7 @@ async fn test_file(context: Rc) -> HttpResponse {
 #[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("cookie")]))]  
 async fn test_cookie(context: Rc) -> HttpResponse { 
     if context.method() == POST { 
-        match context.form() { 
+        match context.form().await { 
             Some(form) => { 
                 let default_string = String::new(); 
                 let name = form.get("name").unwrap_or(&default_string); 
@@ -203,6 +203,24 @@ async fn test_template() -> HttpResponse {
         message="Hello, world!", 
         items=[1, 2, 3, 4, 5]
     ) 
+} 
+
+// #[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("large_file")]))]
+// async fn large_file(context: Rc) -> HttpResponse {
+//     let mut file = File::open("").unwrap(); 
+//     let mut buffer = Vec::new();
+//     file.read_to_end(&mut buffer).unwrap(); // This reads the file contents into `buffer`.
+//     normal_response(StatusCode::OK, buffer) // Pass `buffer` instead of the usize result.
+// } 
+
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("get")]), allowed_methods=[GET])]  
+async fn get_only() -> HttpResponse { 
+    text_response("Get only")  
+} 
+
+#[url(APP.reg_from(&[TEST_URL.clone(), LitUrl("post")]), allowed_methods=[POST])]  
+async fn post_only() -> HttpResponse { 
+    text_response("Post only")  
 } 
 
 #[url(APP.reg_from(&[TEST_URL.clone(), AnyUrl()]))]  

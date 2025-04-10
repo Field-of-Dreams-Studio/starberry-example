@@ -28,9 +28,9 @@ dependencies = [
 
 [[package]]
 name = "akari"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e660cbf55f82eca51c3064a974d56029bb31cd2889658b89341e79d0b2517655"
+checksum = "b1fede9c2b7c918b8ba2148e5b06514086f56041086890e6b35dda80c423a735"
 dependencies = [
  "akari_macro",
 ]
@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "starberry"
-version = "0.4.3"
+version = "0.4.5"
 dependencies = [
  "akari",
  "ctor",
@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "starberry_core"
-version = "0.4.3"
+version = "0.4.6"
 dependencies = [
  "akari",
  "futures",
@@ -533,7 +533,7 @@ dependencies = [
 
 [[package]]
 name = "starberry_macro"
-version = "0.4.1"
+version = "0.4.3"
 dependencies = [
  "ctor",
  "proc-macro2",

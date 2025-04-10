@@ -153,7 +153,7 @@ Demonstration of async processing with sleep operations.
 async fn test_form() -> HttpResponse { 
     println!("Request to this dir"); 
     if req.method() == POST { 
-        match req.form() { 
+        match req.form().await { 
             Some(form) => { 
                 return text_response(format!("Form data: {:?}", form)); 
             } 
@@ -178,7 +178,7 @@ Handles form submissions:
 async fn test_file(request: Rc) -> HttpResponse { 
     println!("Request to this dir"); 
     if request.method() == POST { 
-        match request.files() { 
+        match request.files().await { 
             Some(form) => { 
                 return text_response(format!("{:#?}", form.get("file").unwrap().get_files().unwrap())); 
             } 
@@ -192,7 +192,7 @@ async fn test_file(request: Rc) -> HttpResponse {
 ```
 
 Handles file uploads:
-- Uses `request.files()` to extract uploaded files
+- Uses `request.files()` to extract uploaded files 
 - Displays file information when POST request contains files
 
 #### Template Rendering

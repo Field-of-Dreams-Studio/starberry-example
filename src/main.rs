@@ -1,7 +1,7 @@
 use starberry::prelude::*; 
 use example_documentation::*; 
 
-#[tokio::main]  
+#[tokio::main] 
 async fn main() { 
 
     let furl = APP.clone().reg_from(&[LitUrl("flexible"), LitUrl("url"), LitUrl("may_be_changed")]); 
